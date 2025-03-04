@@ -1,4 +1,4 @@
-use crate::schema::{Assertion, Issuer, Status};
+use crate::schema::{Assertion, EncryptedAssertion, Issuer, Status};
 use crate::signature::Signature;
 use chrono::prelude::*;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
@@ -32,7 +32,7 @@ pub struct Response {
     #[serde(rename = "Status")]
     pub status: Option<Status>,
     #[serde(rename = "EncryptedAssertion")]
-    pub encrypted_assertion: Option<String>,
+    pub encrypted_assertion: Option<EncryptedAssertion>,
     #[serde(rename = "Assertion")]
     pub assertion: Option<Assertion>,
 }
@@ -111,10 +111,10 @@ impl TryFrom<&Response> for Event<'_> {
             writer.write_event(event)?;
         }
 
-        // TODO: encrypted assertion
-        // if let Some(assertion) = &self.encrypted_assertion {
-        //     writer.write(assertion.to_string()?.as_bytes())?;
-        // }
+        if let Some(encrypted_assertion) = &value.encrypted_assertion {
+            let event: Event<'_> = encrypted_assertion.try_into()?;
+            writer.write_event(event)?;
+        }
 
         writer.write_event(Event::End(BytesEnd::new(NAME)))?;
         Ok(Event::Text(BytesText::from_escaped(String::from_utf8(

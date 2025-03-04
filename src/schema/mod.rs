@@ -1,23 +1,24 @@
 pub mod authn_request;
 mod conditions;
+mod encrypted_assertion;
 mod issuer;
 mod name_id_policy;
 mod requested_authn_context;
 mod response;
 mod subject;
 
+use crate::attribute::Attribute;
+use crate::signature::Signature;
 pub use authn_request::AuthnRequest;
+use chrono::prelude::*;
 pub use conditions::*;
+pub use encrypted_assertion::EncryptedAssertion;
 pub use issuer::Issuer;
 pub use name_id_policy::NameIdPolicy;
 pub use requested_authn_context::{AuthnContextComparison, RequestedAuthnContext};
 pub use response::Response;
-pub use subject::*;
-
-use crate::attribute::Attribute;
-use crate::signature::Signature;
-use chrono::prelude::*;
 use serde::Deserialize;
+pub use subject::*;
 
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;

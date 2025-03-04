@@ -99,6 +99,15 @@ pub enum Error {
 
     #[error("SLO url is missing")]
     MissingSloUrl,
+
+    #[error("Missing private key")]
+    MissingPrivateKey,
+
+    #[error("Failed to decrypt assertion: {error}")]
+    FailedToDecryptAssertion { error: String },
+
+    #[error("Invalid private key: {error}")]
+    InvalidPrivateKey { error: String },
 }
 
 #[derive(Builder, Clone)]
@@ -119,6 +128,7 @@ pub struct ServiceProvider {
     pub contact_person: Option<ContactPerson>,
     pub max_issue_delay: Duration,
     pub max_clock_skew: Duration,
+    pub private_key: Option<openssl::pkey::PKey<Private>>,
 }
 
 impl Default for ServiceProvider {
@@ -139,6 +149,7 @@ impl Default for ServiceProvider {
             contact_person: None,
             max_issue_delay: Duration::seconds(90),
             max_clock_skew: Duration::seconds(180),
+            private_key: None,
         }
     }
 }
@@ -377,9 +388,20 @@ impl ServiceProvider {
                 }
             }
         }
+        if let Some(encrypted_assertion) = &response.encrypted_assertion {
+            // Get the private key for decryption
+            let private_key = self.private_key().ok_or(Error::MissingPrivateKey)?;
 
-        if let Some(_encrypted_assertion) = &response.encrypted_assertion {
-            Err(Error::EncryptedAssertionsNotYetSupported)
+            // Decrypt the assertion
+            let assertion = encrypted_assertion.decrypt(private_key).map_err(|e| {
+                Error::FailedToDecryptAssertion {
+                    error: e.to_string(),
+                }
+            })?;
+
+            // Validate the decrypted assertion
+            self.validate_assertion(&assertion, possible_request_ids)?;
+            Ok(assertion)
         } else if let Some(assertion) = &response.assertion {
             self.validate_assertion(assertion, possible_request_ids)?;
             Ok(assertion.clone())
@@ -485,6 +507,34 @@ impl ServiceProvider {
             force_authn: Some(self.force_authn),
             ..AuthnRequest::default()
         })
+    }
+
+    pub fn private_key(&self) -> Option<&openssl::pkey::PKey<Private>> {
+        self.private_key.as_ref()
+    }
+
+    /// Set the private key for decrypting encrypted assertions
+    pub fn with_private_key(mut self, private_key: openssl::pkey::PKey<Private>) -> Self {
+        self.private_key = Some(private_key);
+        self
+    }
+
+    /// Set the private key from PEM format
+    pub fn with_private_key_pem(mut self, pem_data: &[u8]) -> Result<Self, Error> {
+        let private_key = openssl::pkey::PKey::private_key_from_pem(pem_data).map_err(|e| {
+            Error::InvalidPrivateKey {
+                error: e.to_string(),
+            }
+        })?;
+
+        self.private_key = Some(private_key);
+        Ok(self)
+    }
+
+    /// Set the IdP metadata for this ServiceProvider
+    pub fn with_idp_metadata(mut self, idp_metadata: EntityDescriptor) -> Self {
+        self.idp_metadata = idp_metadata;
+        self
     }
 }
 
